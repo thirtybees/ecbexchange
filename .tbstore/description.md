@@ -1,0 +1,1 @@
+This module fetches exchange rates from the European Central Bank (ECB) and applies them to the shop's currency exchange rates. The ECB updates these rates daily, around 16:00 CET. Using it, your shop has always reasonably up to date exchange rates and can display prices in more than one currency without the risk of losses due to outdated currency conversion.

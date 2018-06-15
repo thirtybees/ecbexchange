@@ -91,7 +91,7 @@ class ECBExchange extends CurrencyRateModule
     {
         static::fillServiceCache();
 
-        return [];
+        return array_keys($this->serviceCache);
     }
 
     /**

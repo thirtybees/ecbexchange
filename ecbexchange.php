@@ -79,7 +79,19 @@ class ECBExchange extends CurrencyRateModule
     {
         static::fillServiceCache();
 
-        return false;
+        $divisor = $this->serviceCache[$params['baseCurrency']];
+
+        $exchangeRates = [];
+        foreach ($params['currencies'] as $currency) {
+            if (array_key_exists($currency, $this->serviceCache)) {
+                $exchangeRates[$currency] =
+                    $this->serviceCache[$currency] / $divisor;
+            } else {
+                $exchangeRates[$currency] = false;
+            }
+        }
+
+        return $exchangeRates;
     }
 
     /**

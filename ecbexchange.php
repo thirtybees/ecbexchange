@@ -46,6 +46,31 @@ class ECBExchange extends CurrencyRateModule
      */
     public function install()
     {
-        return parent::install();
+        return parent::install()
+               && $this->registerHook('actionRetrieveCurrencyRates');
+    }
+
+    /**
+     * @param  array $params Description see hookActionRetrieveCurrencyRates()
+     *                       in classes/module/CurrencyRateModule.php in core.
+     *
+     * @return false|array   Description see hookActionRetrieveCurrencyRates()
+     *                       in classes/module/CurrencyRateModule.php in core.
+     *
+     * @since 1.0.0
+     */
+    public function hookActionRetrieveCurrencyRates($params)
+    {
+        return false;
+    }
+
+    /**
+     * @return array An array with uppercase currency codes (ISO 4217).
+     *
+     * @since 1.0.0
+     */
+    public function getSupportedCurrencies()
+    {
+        return [];
     }
 }

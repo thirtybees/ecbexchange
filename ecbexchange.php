@@ -24,6 +24,9 @@ class ECBExchange extends CurrencyRateModule
 {
     const SERVICE_URL = 'http://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml';
 
+    const SERVICECACHE_FILE = _PS_CACHE_DIR_.'/ecbexchangeServiceCache.php';
+    const SERVICECACHE_MAX_AGE = 3600; // seconds
+
     /*
      * If filled, an array with currency exchange rates, like this:
      *
@@ -100,7 +103,18 @@ class ECBExchange extends CurrencyRateModule
      */
     public function fillServiceCache()
     {
-        if (!count($this->serviceCache)) {
+        @include static::SERVICECACHE_FILE;
+
+        if (file_exists(static::SERVICECACHE_FILE)) {
+            $cacheAge = time() - filemtime(static::SERVICECACHE_FILE);
+        } else {
+            $cacheAge = PHP_INT_MAX;
+        }
+
+        if (!count($this->serviceCache)
+            || $cacheAge > static::SERVICECACHE_MAX_AGE) {
+            $this->serviceCache = [];
+
             $guzzle = new GuzzleHttp\Client();
             try {
                 $response = $guzzle->get(static::SERVICE_URL)->getBody();
@@ -110,6 +124,14 @@ class ECBExchange extends CurrencyRateModule
                 foreach ($XML->Cube->Cube->Cube as $entry) {
                     $this->serviceCache[(string) $entry['currency']] =
                         (float) $entry['rate'];
+                }
+
+                file_put_contents(static::SERVICECACHE_FILE,
+                                  "<?php\n\n".'$this->serviceCache = '
+                                  .var_export($this->serviceCache, true)
+                                  .";\n");
+                if (function_exists('opcache_invalidate')) {
+                    opcache_invalidate(static::SERVICECACHE_FILE);
                 }
             } catch (Exception $e) {
                 $this->serviceCache = [];

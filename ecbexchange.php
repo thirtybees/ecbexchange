@@ -24,7 +24,10 @@ class ECBExchange extends CurrencyRateModule
 {
     const SERVICE_URL = 'http://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml';
 
-    const SERVICECACHE_FILE = _PS_CACHE_DIR_.'/ecbexchangeServiceCache.php';
+    // Not compatible with PHP 5.5 (but starting with PHP 5.6):
+    //const SERVICECACHE_FILE = _PS_CACHE_DIR_.'/ecbexchangeServiceCache.php';
+    // Instead (remove this after dropping PHP 5.5 support):
+    protected static $SERVICECACHE_FILE;
     const SERVICECACHE_MAX_AGE = 3600; // seconds
 
     /*
@@ -55,6 +58,9 @@ class ECBExchange extends CurrencyRateModule
         $this->displayName = $this->l('ECB Exchange Rate Services');
         $this->description = $this->l('Fetches currency exchange rates from the European Central Bank.');
         $this->tb_versions_compliancy = '> 1.0.0';
+
+        // For PHP 5.5 support.
+        static::$SERVICECACHE_FILE = _PS_CACHE_DIR_.'/ecbexchangeServiceCache.php';
     }
 
     /**
@@ -115,10 +121,10 @@ class ECBExchange extends CurrencyRateModule
      */
     public function fillServiceCache()
     {
-        @include static::SERVICECACHE_FILE;
+        @include static::$SERVICECACHE_FILE;
 
-        if (file_exists(static::SERVICECACHE_FILE)) {
-            $cacheAge = time() - filemtime(static::SERVICECACHE_FILE);
+        if (file_exists(static::$SERVICECACHE_FILE)) {
+            $cacheAge = time() - filemtime(static::$SERVICECACHE_FILE);
         } else {
             $cacheAge = PHP_INT_MAX;
         }
@@ -138,12 +144,12 @@ class ECBExchange extends CurrencyRateModule
                         (float) $entry['rate'];
                 }
 
-                file_put_contents(static::SERVICECACHE_FILE,
+                file_put_contents(static::$SERVICECACHE_FILE,
                                   "<?php\n\n".'$this->serviceCache = '
                                   .var_export($this->serviceCache, true)
                                   .";\n");
                 if (function_exists('opcache_invalidate')) {
-                    opcache_invalidate(static::SERVICECACHE_FILE);
+                    opcache_invalidate(static::$SERVICECACHE_FILE);
                 }
             } catch (Exception $e) {
                 $this->serviceCache = [];

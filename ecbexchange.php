@@ -133,7 +133,10 @@ class ECBExchange extends CurrencyRateModule
             || $cacheAge > static::SERVICECACHE_MAX_AGE) {
             $this->serviceCache = [];
 
-            $guzzle = new GuzzleHttp\Client();
+            $guzzle = new \GuzzleHttp\Client([
+                'verify'    => _PS_TOOL_DIR_.'cacert.pem',
+                'timeout'   => 20,
+            ]);
             try {
                 $response = $guzzle->get(static::SERVICE_URL)->getBody();
                 $XML = simplexml_load_string($response);

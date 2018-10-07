@@ -6,6 +6,7 @@ tags:
   - payment
   - currency
   - exchange rates
+  - ecbexchange
 description_short: Fetches currency exchange rates from the European Central Bank.
 description: description.md
 images:

@@ -58,6 +58,7 @@ class ECBExchange extends CurrencyRateModule
         $this->displayName = $this->l('ECB Exchange Rate Services');
         $this->description = $this->l('Fetches currency exchange rates from the European Central Bank.');
         $this->tb_versions_compliancy = '> 1.0.0';
+        $this->tb_min_version = '1.0.0';
 
         // For PHP 5.5 support.
         static::$SERVICECACHE_FILE = _PS_CACHE_DIR_.'/ecbexchangeServiceCache.php';

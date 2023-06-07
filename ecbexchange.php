@@ -22,7 +22,7 @@
  */
 class ECBExchange extends CurrencyRateModule
 {
-    const SERVICE_URL = 'http://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml';
+    const SERVICE_URL = 'https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml';
 
     // Not compatible with PHP 5.5 (but starting with PHP 5.6):
     //const SERVICECACHE_FILE = _PS_CACHE_DIR_.'/ecbexchangeServiceCache.php';

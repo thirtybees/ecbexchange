@@ -23,26 +23,14 @@
 class ECBExchange extends CurrencyRateModule
 {
     const SERVICE_URL = 'https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml';
-
-    // Not compatible with PHP 5.5 (but starting with PHP 5.6):
-    //const SERVICECACHE_FILE = _PS_CACHE_DIR_.'/ecbexchangeServiceCache.php';
-    // Instead (remove this after dropping PHP 5.5 support):
-    protected static $SERVICECACHE_FILE;
+    const SERVICECACHE_FILE = _PS_CACHE_DIR_.'/ecbexchange.xml';
     const SERVICECACHE_MAX_AGE = 3600; // seconds
-
-    /*
-     * If filled, an array with currency exchange rates, like this:
-     *
-     *     [
-     *         'EUR' => 1.233434,
-     *         'USD' => 1.343,
-     *         [...]
-     *     ]
-     */
-    protected $serviceCache = [];
 
     /**
      * ECBExchange constructor.
+     *
+     * @throws PrestaShopDatabaseException
+     * @throws PrestaShopException
      */
     public function __construct()
     {
@@ -59,41 +47,46 @@ class ECBExchange extends CurrencyRateModule
         $this->description = $this->l('Fetches currency exchange rates from the European Central Bank.');
         $this->tb_versions_compliancy = '> 1.0.0';
         $this->tb_min_version = '1.0.0';
-
-        // For PHP 5.5 support.
-        static::$SERVICECACHE_FILE = _PS_CACHE_DIR_.'/ecbexchangeServiceCache.php';
     }
 
     /**
      * @return bool
+     * @throws PrestaShopException
      */
     public function install()
     {
-        return parent::install()
-               && $this->registerHook('actionRetrieveCurrencyRates');
+        return (
+            parent::install() &&
+            $this->registerHook('actionRetrieveCurrencyRates')
+        );
     }
 
     /**
-     * @param  array $params Description see hookActionRetrieveCurrencyRates()
-     *                       in classes/module/CurrencyRateModule.php in core.
+     * @param array $params
      *
-     * @return false|array   Description see hookActionRetrieveCurrencyRates()
-     *                       in classes/module/CurrencyRateModule.php in core.
+     * @return array see hookActionRetrieveCurrencyRates() in classes/module/CurrencyRateModule.php in core.
      *
-     * @since 1.0.0
+     * @see hookActionRetrieveCurrencyRates() in classes/module/CurrencyRateModule.php in core.
      */
     public function hookActionRetrieveCurrencyRates($params)
     {
-        static::fillServiceCache();
-
-        $divisor = $this->serviceCache[$params['baseCurrency']];
+        $baseCurrency = $params['baseCurrency'];
+        $currencies = $params['currencies'];
+        $serviceExchangeRates = $this->getServiceExchangeRates();
 
         $exchangeRates = [];
-        foreach ($params['currencies'] as $currency) {
-            if (array_key_exists($currency, $this->serviceCache)) {
-                $exchangeRates[$currency] =
-                    $this->serviceCache[$currency] / $divisor;
-            } else {
+        if (array_key_exists($baseCurrency, $serviceExchangeRates)) {
+            $divisor = $serviceExchangeRates[$baseCurrency];
+            foreach ($currencies as $currency) {
+                if (array_key_exists($currency, $serviceExchangeRates)) {
+                    $exchangeRates[$currency] = (float)$serviceExchangeRates[$currency] / $divisor;
+                } else {
+                    $exchangeRates[$currency] = false;
+                }
+            }
+        } else {
+            $this->log("ECB Exchange does not provide rate for your base currency");
+            foreach ($currencies as $currency) {
                 $exchangeRates[$currency] = false;
             }
         }
@@ -103,61 +96,100 @@ class ECBExchange extends CurrencyRateModule
 
     /**
      * @return array An array with uppercase currency codes (ISO 4217).
-     *
-     * @since 1.0.0
      */
     public function getSupportedCurrencies()
     {
-        static::fillServiceCache();
-
-        return array_keys($this->serviceCache);
+        return array_keys($this->getServiceExchangeRates());
     }
 
     /**
-     * Makes sure that $this->serviceCache is filled and does an service
-     * request if not. Note that $this->serviceCache can be still an empty
-     * array after return, e.g. if the request failed for some reason.
+     * Returns exchange rates from webservice
      *
-     * @since 1.0.0
+     * @return array
      */
-    public function fillServiceCache()
+    public function getServiceExchangeRates()
     {
-        @include static::$SERVICECACHE_FILE;
+        static $cache = null;
+        if (is_null($cache)) {
+            $cache = [];
+            $cache['EUR'] = 1.0;
 
-        if (file_exists(static::$SERVICECACHE_FILE)) {
-            $cacheAge = time() - filemtime(static::$SERVICECACHE_FILE);
-        } else {
-            $cacheAge = PHP_INT_MAX;
-        }
-
-        if (!count($this->serviceCache)
-            || $cacheAge > static::SERVICECACHE_MAX_AGE) {
-            $this->serviceCache = [];
-
-            $guzzle = new \GuzzleHttp\Client([
-                'verify'    => _PS_TOOL_DIR_.'cacert.pem',
-                'timeout'   => 20,
-            ]);
-            try {
-                $response = $guzzle->get(static::SERVICE_URL)->getBody();
-                $XML = simplexml_load_string($response);
-
-                $this->serviceCache['EUR'] = 1.0;
-                foreach ($XML->Cube->Cube->Cube as $entry) {
-                    $this->serviceCache[(string) $entry['currency']] =
-                        (float) $entry['rate'];
+            $content = $this->getXml();
+            if ($content) {
+                $xml = simplexml_load_string($content);
+                if ($xml) {
+                    foreach ($xml->Cube->Cube->Cube as $entry) {
+                        $currency = strtoupper((string)$entry['currency']);
+                        $rate = (float)$entry['rate'];
+                        $cache[$currency] = $rate;
+                    }
+                } else {
+                    $this->log("Failed to parse xml file");
                 }
-
-                file_put_contents(static::$SERVICECACHE_FILE,
-                                  "<?php\n\n".'$this->serviceCache = '
-                                  .var_export($this->serviceCache, true)
-                                  .";\n");
-                if (function_exists('opcache_invalidate')) {
-                    opcache_invalidate(static::$SERVICECACHE_FILE);
-                }
-            } catch (Exception $e) {
-                $this->serviceCache = [];
             }
         }
+        return $cache;
+    }
+
+    /**
+     * Returns service XML file, either from local cache or from webservice
+     *
+     * @return string|false
+     */
+    protected function getXml()
+    {
+        // try to load data from cache
+        if (file_exists(static::SERVICECACHE_FILE)) {
+            $cacheAge = time() - filemtime(static::SERVICECACHE_FILE);
+            if ($cacheAge < static::SERVICECACHE_MAX_AGE) {
+                $content = file_get_contents(static::SERVICECACHE_FILE);
+                if ($content) {
+                    return $content;
+                }
+            } else {
+                unlink(static::SERVICECACHE_FILE);
+            }
+        }
+
+        // fetch fresh data
+        $content = $this->downloadXml();
+        if ($content) {
+            file_put_contents(static::SERVICECACHE_FILE, $content);
+        }
+        return $content;
+    }
+
+    /**
+     * Download XML file from webservice
+     *
+     * @return string|false
+     */
+    protected function downloadXml()
+    {
+        $guzzle = new \GuzzleHttp\Client([
+            'verify'    => _PS_TOOL_DIR_.'cacert.pem',
+            'timeout'   => 20,
+        ]);
+        try {
+            return (string)$guzzle->get(static::SERVICE_URL)->getBody();
+        } catch (\GuzzleHttp\Exception\GuzzleException $e) {
+            $this->log("Failed to retrieve xml file: " . $e);
+            return false;
+        } catch (Exception $e) {
+            $this->log("Failed to retrieve xml file: " . $e);
+            return false;
+        }
+    }
+
+    /**
+     * @param string $message
+     *
+     * @return void
+     */
+    protected function log($message)
+    {
+        try {
+            Logger::addLog($this->name . ': ' . $message);
+        } catch (Exception $e) {}
     }
 }
